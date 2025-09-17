@@ -1,5 +1,4 @@
 FROM python:3.11-slim
-
 WORKDIR /app
 
 COPY api/requirements.txt .
@@ -9,4 +8,4 @@ COPY api/ .
 
 EXPOSE 5000
 
-CMD ["python", "server.py"]
+CMD ["gunicorn", "-w", "4", "-b", "0.0.0.0:${PORT}", "server:app"]
