@@ -1,6 +1,4 @@
-import os
-import subprocess
-import tempfile
+import os, re, subprocess, tempfile
 import shutil
 import sys
 from flask import Flask, request, jsonify
@@ -9,6 +7,47 @@ from flask_cors import CORS
 app = Flask(__name__)
 CORS(app)  # Enable CORS for frontend integration
 
+def run_java(code: str):
+    output = {}
+    with tempfile.TemporaryDirectory() as tmpdir:
+        # 1. Extract class name from code
+        match = re.search(r"public\s+class\s+(\w+)", code)
+        class_name = match.group(1) if match else "Main"
+
+        java_file = os.path.join(tmpdir, f"{class_name}.java")
+
+        # 2. Write the Java code to file
+        with open(java_file, "w") as f:
+            f.write(code)
+
+        # 3. Compile
+        compile_proc = subprocess.run(
+            ["javac", java_file],
+            capture_output=True,
+            text=True
+        )
+        if compile_proc.returncode != 0:
+            output["compile"] = {
+                "stdout": compile_proc.stdout,
+                "stderr": compile_proc.stderr,
+                "returncode": compile_proc.returncode
+            }
+            return output  # return early if compile failed
+
+        # 4. Run
+        run_proc = subprocess.run(
+            ["java", "-cp", tmpdir, class_name],
+            capture_output=True,
+            text=True
+        )
+
+        output["run"] = {
+            "stdout": run_proc.stdout,
+            "stderr": run_proc.stderr,
+            "returncode": run_proc.returncode
+        }
+
+    return output
 
 @app.route("/")
 def home():
@@ -112,41 +151,6 @@ def run_node(code):
         return format_result(result)
     finally:
         shutil.rmtree(workdir, ignore_errors=True)
-
-
-def run_java(code):
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".java", delete=False) as tmp:
-        tmp.write(code)
-        tmp.flush()
-        tmp_name = tmp.name
-        base = os.path.splitext(os.path.basename(tmp_name))[0]
-
-    try:
-        compile_proc = subprocess.run(
-            ["javac", tmp_name],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            timeout=10
-        )
-        if compile_proc.returncode != 0:
-            return format_result(compile_proc)
-
-        result = subprocess.run(
-            ["java", "-cp", os.path.dirname(tmp_name), base],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            timeout=10
-        )
-        return format_result(result)
-    finally:
-        for ext in [".java", ".class"]:
-            try:
-                os.remove(tmp_name.replace(".java", ext))
-            except FileNotFoundError:
-                pass
-
 
 def run_cpp(code):
     with tempfile.NamedTemporaryFile(mode="w", suffix=".cpp", delete=False) as tmp:
