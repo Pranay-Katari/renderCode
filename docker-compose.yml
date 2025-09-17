@@ -21,7 +21,6 @@ services:
   java:
     build: ./runtimes/java
     restart: unless-stopped
-
   cpp:
     build: ./runtimes/cpp
     restart: unless-stopped
